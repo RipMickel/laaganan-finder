@@ -1,5 +1,4 @@
-const API_KEY = "YOUR_OPENWEATHER_API_KEY";
-
+const API_KEY = process.env.WEATHER_API_KEY;
 let map = L.map('map').setView([14.5995, 120.9842], 10); // default Manila
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -27,10 +26,8 @@ function generateGrid(lat, lon, step = 0.2, size = 2) {
 }
 
 async function fetchWeather(lat, lon) {
-  const res = await fetch(
-    `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`
-  );
-  return res.json();
+const res = await fetch(`/weather?lat=${lat}&lon=${lon}`);
+return res.json();
 }
 
 function scoreWeather(data, activity) {
