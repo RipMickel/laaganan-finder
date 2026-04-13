@@ -14,12 +14,18 @@ const satelliteLayer = L.tileLayer(
 
 const map = L.map('map', {
   center: [14.5995, 120.9842],
-  zoom: 10,
-  layers: [osmLayer]
+  zoom: 11,
+  layers: [osmLayer],
+  zoomControl: false,          // we'll add it in a better spot
+  attributionControl: false
 });
 
+// Zoom control — top-right, below topbar+pills
+L.control.zoom({ position: 'bottomright' }).addTo(map);
+L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+
 L.control.layers(
-  { '🗺️ Street Map': osmLayer, '🛰️ Satellite': satelliteLayer },
+  { '🗺️ Street': osmLayer, '🛰️ Satellite': satelliteLayer },
   {}, { position: 'topright' }
 ).addTo(map);
 
@@ -27,8 +33,8 @@ L.control.layers(
 // 2. STATE
 // ─────────────────────────────────────────────
 
-let allData        = null;   // raw elements from the single bulk fetch
-let placeMarkers   = [];     // currently visible markers
+let allData        = null;
+let placeMarkers   = [];
 let routeControl   = null;
 let routePoints    = [];
 let routeMode      = false;
@@ -38,12 +44,11 @@ let searchPin      = null;
 let searchTimer    = null;
 let activeCategory = null;
 let preloadDone    = false;
-let preloadPromise = null;
 
-const RADIUS = 50000; // 50 km for all categories
+const RADIUS = 50000; // 50 km
 
 // ─────────────────────────────────────────────
-// 3. OVERPASS — single bulk query for everything
+// 3. OVERPASS — single bulk query
 // ─────────────────────────────────────────────
 
 const OVERPASS_MIRRORS = [
@@ -65,7 +70,6 @@ async function overpassFetch(query) {
   return Promise.any(requests);
 }
 
-// One giant query that fetches ALL categories in a single round-trip
 function buildBulkQuery(lat, lng) {
   const R = RADIUS;
   return `
@@ -93,61 +97,36 @@ out center qt;
 }
 
 // ─────────────────────────────────────────────
-// 4. CATEGORY DEFINITIONS (client-side classify)
+// 4. CATEGORIES & CLASSIFIER
 // ─────────────────────────────────────────────
 
 const CATEGORIES = {
-  restaurant: {
-    emoji: '🍽️', label: 'Restaurant', color: '#e53935',
-    match: t => t.amenity === 'restaurant'
-  },
-  pizza: {
-    emoji: '🍕', label: 'Pizza', color: '#f4511e',
-    match: t => (t.amenity === 'restaurant' || t.amenity === 'fast_food') &&
-                /pizza/i.test(t.cuisine || t.name || '')
-  },
-  local: {
-    emoji: '🥘', label: 'Local Food', color: '#fb8c00',
-    match: t => /filipino|local|native|pinoy|carinderia|lutong|turo|kainan/i
-                .test((t.cuisine || '') + ' ' + (t.name || ''))
-  },
-  fastfood: {
-    emoji: '🍔', label: 'Fast Food', color: '#e6a817',
-    match: t => t.amenity === 'fast_food'
-  },
-  coffee: {
-    emoji: '☕', label: 'Coffee Shop', color: '#6f4e37',
-    match: t => t.amenity === 'cafe' || t.shop === 'coffee'
-  },
-  pool: {
-    emoji: '🏊', label: 'Swimming Pool', color: '#039be5',
-    match: t => t.leisure === 'swimming_pool'
-  },
-  resort: {
-    emoji: '🌴', label: 'Resort', color: '#43a047',
-    match: t => t.tourism === 'resort' || /resort/i.test(t.name || '')
-  },
-  beach: {
-    emoji: '🏖️', label: 'Beach', color: '#ffb300',
-    match: t => t.natural === 'beach' || t.leisure === 'beach_resort'
-  },
-  park: {
-    emoji: '🌳', label: 'Park', color: '#388e3c',
-    match: t => t.leisure === 'park'
-  },
-  attraction: {
-    emoji: '🎡', label: 'Attraction', color: '#8e24aa',
-    match: t => /^(attraction|theme_park|museum|zoo)$/.test(t.tourism || '')
-  }
+  restaurant: { emoji: '🍽️', label: 'Restaurants', color: '#FF3B30',
+    match: t => t.amenity === 'restaurant' },
+  pizza:      { emoji: '🍕', label: 'Pizza',        color: '#FF6B35',
+    match: t => /pizza/i.test((t.cuisine||'')+(t.name||'')) },
+  local:      { emoji: '🥘', label: 'Local Food',   color: '#FF9500',
+    match: t => /filipino|local|native|pinoy|carinderia|lutong|turo|kainan/i.test((t.cuisine||'')+(t.name||'')) },
+  fastfood:   { emoji: '🍔', label: 'Fast Food',    color: '#FFCC00',
+    match: t => t.amenity === 'fast_food' },
+  coffee:     { emoji: '☕', label: 'Coffee',        color: '#A2845E',
+    match: t => t.amenity === 'cafe' || t.shop === 'coffee' },
+  pool:       { emoji: '🏊', label: 'Pools',         color: '#32ADE6',
+    match: t => t.leisure === 'swimming_pool' },
+  resort:     { emoji: '🌴', label: 'Resorts',       color: '#34C759',
+    match: t => t.tourism === 'resort' || /resort/i.test(t.name||'') },
+  beach:      { emoji: '🏖️', label: 'Beaches',      color: '#FFD60A',
+    match: t => t.natural === 'beach' || t.leisure === 'beach_resort' },
+  park:       { emoji: '🌳', label: 'Parks',         color: '#30D158',
+    match: t => t.leisure === 'park' },
+  attraction: { emoji: '🎡', label: 'Attractions',   color: '#BF5AF2',
+    match: t => /^(attraction|theme_park|museum|zoo)$/.test(t.tourism||'') }
 };
 
-// Pre-classified per category: { restaurant: [...], pizza: [...], ... }
 const classified = {};
 
 function classifyAll(elements) {
-  // Reset
   Object.keys(CATEGORIES).forEach(k => { classified[k] = []; });
-
   const seen = new Set();
   for (const el of elements) {
     const lat = el.lat ?? el.center?.lat;
@@ -156,9 +135,7 @@ function classifyAll(elements) {
     const key = `${lat.toFixed(4)}|${lon.toFixed(4)}`;
     if (seen.has(key)) continue;
     seen.add(key);
-
     const t = el.tags || {};
-    // An element can match multiple categories (e.g. pizza + restaurant)
     for (const [type, cfg] of Object.entries(CATEGORIES)) {
       if (cfg.match(t)) classified[type].push({ ...el, _lat: lat, _lon: lon });
     }
@@ -166,110 +143,100 @@ function classifyAll(elements) {
 }
 
 // ─────────────────────────────────────────────
-// 5. PRELOAD — fires as soon as location is known
+// 5. LOADING BAR
+// ─────────────────────────────────────────────
+
+let _barTimer = null;
+function startLoadingAnimation() {
+  const bar = document.getElementById('loading-bar');
+  bar.style.display = 'block';
+  let pct = 5;
+  bar.querySelector('.bar-fill').style.width = pct + '%';
+  _barTimer = setInterval(() => {
+    pct += (85 - pct) * 0.07;
+    bar.querySelector('.bar-fill').style.width = Math.min(pct, 85) + '%';
+  }, 300);
+}
+function finishLoadingBar() {
+  clearInterval(_barTimer);
+  const bar = document.getElementById('loading-bar');
+  bar.querySelector('.bar-fill').style.width = '100%';
+  setTimeout(() => { bar.style.display = 'none'; bar.querySelector('.bar-fill').style.width = '0%'; }, 600);
+}
+function failLoadingBar() {
+  clearInterval(_barTimer);
+  document.getElementById('loading-bar').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// 6. PRELOAD
 // ─────────────────────────────────────────────
 
 async function preloadAllCategories(lat, lng) {
   if (preloadDone) return;
   preloadDone = true;
 
-  const animTimer = startLoadingAnimation();
-  setResult('⏳ Loading all categories in background… this takes one request for everything.');
+  startLoadingAnimation();
+  setResult('⏳ Discovering places near you…');
 
   try {
-    const query = buildBulkQuery(lat, lng);
-    const data  = await overpassFetch(query);
-    clearInterval(animTimer);
+    const data = await overpassFetch(buildBulkQuery(lat, lng));
+    finishLoadingBar();
     allData = data.elements;
     classifyAll(allData);
 
-    updateLoadingBar(100);
     const total = Object.values(classified).reduce((s, a) => s + a.length, 0);
-    setResult(`✅ All categories loaded! <b>${total}</b> places within 50 km — pick a category below.`);
+    setResult(`✅ Found <b>${total}</b> places within 50 km — tap a category above!`);
+    updateSheetSubtitle(`${total} places within 50 km`);
 
-    // Update panel badges
+    // Update pill badges
     Object.entries(CATEGORIES).forEach(([type, cfg]) => {
       const btn = document.getElementById(`pbtn-${type}`);
       if (!btn) return;
       const count = classified[type].length;
-      btn.innerHTML = `${cfg.emoji} ${cfg.label} <span style="
-        margin-left:auto;
-        background:${cfg.color};
-        color:white;
-        border-radius:10px;
-        padding:1px 7px;
-        font-size:11px;
-        font-weight:bold;
-      ">${count}</span>`;
+      btn.innerHTML = `${cfg.emoji} ${cfg.label} <span class="pill-badge">${count}</span>`;
     });
 
-    // Auto-show last active category or first one
-    if (activeCategory && classified[activeCategory]) {
-      showCategory(activeCategory);
-    }
+    if (activeCategory) showCategory(activeCategory);
 
   } catch (err) {
-    clearInterval(animTimer);
-    updateLoadingBar(-1);
-    setResult('❌ Failed to preload places. Click a category to try individually.');
-    preloadDone = false; // allow retry
+    failLoadingBar();
+    setResult('❌ Couldn\'t load places. Check your connection and try again.');
+    preloadDone = false;
     console.error(err);
   }
 }
 
-function updateLoadingBar(pct) {
-  const bar = document.getElementById('loading-bar');
-  if (!bar) return;
-  if (pct < 0) { bar.style.display = 'none'; return; }
-  bar.style.display = 'block';
-  const fill = bar.querySelector('.bar-fill');
-  fill.style.width = pct + '%';
-  if (pct >= 100) setTimeout(() => { bar.style.display = 'none'; }, 600);
-}
-
-// Animate bar from 0→85% while waiting, then jump to 100 when done
-function startLoadingAnimation() {
-  updateLoadingBar(5);
-  let pct = 5;
-  const iv = setInterval(() => {
-    // Slow down as it approaches 85 to fake indeterminate progress
-    pct += (85 - pct) * 0.06;
-    updateLoadingBar(Math.min(pct, 85));
-  }, 300);
-  return iv;
-}
-
 // ─────────────────────────────────────────────
-// 6. LOCATION PIN
+// 7. LOCATION PIN
 // ─────────────────────────────────────────────
 
 const locationIcon = L.divIcon({
   className: '',
   html: `<div style="
-    width:18px; height:18px;
-    background:#4285f4;
+    width:20px;height:20px;
+    background:#007AFF;
     border:3px solid white;
     border-radius:50%;
-    box-shadow:0 0 0 4px rgba(66,133,244,0.3);
+    box-shadow:0 0 0 5px rgba(0,122,255,0.25), 0 2px 8px rgba(0,0,0,0.3);
   "></div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-  popupAnchor: [0, -12]
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+  popupAnchor: [0, -14]
 });
 
-function placeLocationPin(lat, lon, label = 'You are here') {
+function placeLocationPin(lat, lon) {
   userLatLng = L.latLng(lat, lon);
   if (locationPin) map.removeLayer(locationPin);
-  locationPin = L.marker([lat, lon], { icon: locationIcon })
+  locationPin = L.marker([lat, lon], { icon: locationIcon, zIndexOffset: 1000 })
     .addTo(map)
-    .bindPopup(`<b>📍 ${label}</b><br>${lat.toFixed(5)}, ${lon.toFixed(5)}`);
-  map.setView([lat, lon], 13);
-  // Kick off background preload as soon as we have coords
+    .bindPopup(`<b>📍 You are here</b><br><span style="color:#666;font-size:12px">${lat.toFixed(5)}, ${lon.toFixed(5)}</span>`);
+  map.setView([lat, lon], 13, { animate: true });
   preloadAllCategories(lat, lon);
 }
 
 function goToMyLocation() {
-  setResult('📍 Getting your location...');
+  setResult('📍 Finding your location…');
   navigator.geolocation.getCurrentPosition(
     pos => {
       placeLocationPin(pos.coords.latitude, pos.coords.longitude);
@@ -281,52 +248,46 @@ function goToMyLocation() {
 
 navigator.geolocation.getCurrentPosition(
   pos => placeLocationPin(pos.coords.latitude, pos.coords.longitude),
-  ()  => setResult('⚠️ Location access denied. Click "My Location" to try again.')
+  ()  => setResult('⚠️ Location denied. Tap 📍 to try again.')
 );
 
 // ─────────────────────────────────────────────
-// 7. SHOW CATEGORY (instant from cache)
+// 8. SHOW CATEGORY (instant)
 // ─────────────────────────────────────────────
 
 function findPlaces(type) {
-  document.querySelectorAll('.place-btn').forEach(b => b.classList.remove('active'));
-  const btn = document.getElementById(`pbtn-${type}`);
-  if (btn) btn.classList.add('active');
+  // Highlight pill
+  document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+  const pill = document.getElementById(`pbtn-${type}`);
+  if (pill) {
+    pill.classList.add('active');
+    pill.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }
   activeCategory = type;
 
   if (!preloadDone || !classified[type]) {
-    // Data not ready yet — queue it
-    if (!userLatLng) {
-      setResult('❌ Location not detected yet. Click "My Location" first.');
-      return;
-    }
-    setResult(`⏳ Still loading… please wait a moment.`);
-    // Retry after preload finishes
+    if (!userLatLng) { setResult('❌ Location not available. Tap 📍 first.'); return; }
+    setResult('⏳ Still loading… almost there!');
     const poll = setInterval(() => {
-      if (preloadDone && classified[type]) {
-        clearInterval(poll);
-        showCategory(type);
-      }
+      if (preloadDone && classified[type]) { clearInterval(poll); showCategory(type); }
     }, 300);
     return;
   }
-
   showCategory(type);
 }
 
 function showCategory(type) {
   const cfg      = CATEGORIES[type];
   const elements = classified[type] || [];
-
   clearPlaces(false);
 
   if (!elements.length) {
-    setResult(`${cfg.emoji} No ${cfg.label}s found within 50 km.`);
+    setResult(`${cfg.emoji} No ${cfg.label} found within 50 km.`);
+    expandSheet();
     return;
   }
 
-  const icon = makePlaceIcon(cfg.emoji);
-
+  const icon = makeIcon(cfg.emoji);
   elements.forEach(el => {
     const t       = el.tags || {};
     const name    = t.name    || cfg.label;
@@ -335,77 +296,89 @@ function showCategory(type) {
     const hours   = t.opening_hours || '';
     const website = t.website || t['contact:website'] || '';
     const wifi    = t.internet_access === 'wlan' ? '📶 WiFi' : '';
-    const fee     = t.fee === 'yes' ? '💳 Entrance fee' : t.fee === 'no' ? '🆓 Free' : '';
+    const fee     = t.fee === 'yes' ? '💳 Fee' : t.fee === 'no' ? '🆓 Free' : '';
     const safe    = name.replace(/'/g, "\\'");
 
     const popup = [
-      `<b>${cfg.emoji} ${name}</b>`,
-      cuisine, phone ? `📞 ${phone}` : '',
-      hours   ? `🕐 ${hours}` : '',
-      website ? `🌐 <a href="${website}" target="_blank">Website</a>` : '',
-      wifi, fee,
-      `<br><span style="color:#1a73e8;cursor:pointer;"
-        onclick="routeToPlace(${el._lat},${el._lon},'${safe}')">
-        🗺️ Directions from my location</span>`
-    ].filter(Boolean).join('<br>');
+      `<div style="font-weight:700;font-size:15px;margin-bottom:4px">${cfg.emoji} ${name}</div>`,
+      cuisine ? `<div style="color:#888;margin-bottom:2px">${cuisine}</div>` : '',
+      phone   ? `<div>📞 <a href="tel:${phone}">${phone}</a></div>` : '',
+      hours   ? `<div>🕐 ${hours}</div>` : '',
+      website ? `<div>🌐 <a href="${website}" target="_blank">Visit website</a></div>` : '',
+      (wifi || fee) ? `<div style="margin-top:4px">${[wifi,fee].filter(Boolean).join(' · ')}</div>` : '',
+      `<button onclick="routeToPlace(${el._lat},${el._lon},'${safe}')" style="
+        margin-top:10px;width:100%;padding:10px;
+        background:#007AFF;color:white;border:none;
+        border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">
+        🗺️ Get Directions
+      </button>`
+    ].filter(Boolean).join('');
 
-    const marker = L.marker([el._lat, el._lon], { icon })
-      .addTo(map)
-      .bindPopup(popup);
+    const marker = L.marker([el._lat, el._lon], { icon }).addTo(map).bindPopup(popup, { maxWidth: 260 });
     placeMarkers.push(marker);
   });
 
-  document.getElementById('btn-clear-places').style.display = 'block';
+  // Show clear button in sheet
+  document.getElementById('btn-clear-places').style.display = 'flex';
 
   const all = [...placeMarkers, ...(locationPin ? [locationPin] : [])];
-  if (all.length > 1) map.fitBounds(L.featureGroup(all).getBounds().pad(0.1));
+  if (all.length > 1) map.fitBounds(L.featureGroup(all).getBounds().pad(0.12));
 
-  setResult(`${cfg.emoji} Showing <b>${elements.length}</b> ${cfg.label}${elements.length !== 1 ? 's' : ''} within <b>50 km</b> — click a marker for details.`);
+  setResult(`${cfg.emoji} <b>${elements.length} ${cfg.label}</b> within 50 km`);
+  updateSheetSubtitle(`${elements.length} ${cfg.label} nearby · tap a pin for details`);
+  expandSheet();
 }
 
-function makePlaceIcon(emoji) {
+function makeIcon(emoji) {
   return L.divIcon({
     className: '',
-    html: `<div style="font-size:20px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));cursor:pointer;">${emoji}</div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
-    popupAnchor: [0, -14]
+    html: `<div style="font-size:22px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4));cursor:pointer;">${emoji}</div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -16]
   });
 }
 
-function clearPlaces(resetBtn = true) {
+function clearPlaces(full = true) {
   placeMarkers.forEach(m => map.removeLayer(m));
   placeMarkers = [];
-  if (resetBtn) {
-    document.getElementById('btn-clear-places').style.display = 'none';
-    document.querySelectorAll('.place-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-clear-places').style.display = 'none';
+  if (full) {
+    document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
     activeCategory = null;
-    setResult('Pick a category from the panel to explore nearby spots.');
+    setResult('Tap a category above to explore nearby spots.');
+    updateSheetSubtitle('Tap a category above to discover places');
+    collapseSheet();
   }
 }
 
 // ─────────────────────────────────────────────
-// 8. ROUTING
+// 9. ROUTING
 // ─────────────────────────────────────────────
 
 function toggleRouteMode() {
   routeMode = !routeMode;
-  const btn = document.getElementById('btn-route-mode');
+  const fab = document.getElementById('fab-directions');
+  const btn = document.getElementById('btn-directions');
+
   if (routeMode) {
-    btn.classList.add('active');
+    fab.classList.add('active');
+    fab.textContent = '📍';
     routePoints = [];
     resetRoute();
     if (userLatLng) {
       routePoints.push(userLatLng);
-      btn.textContent = '📍 Click destination…';
-      setResult('📍 Your location is set as start. Now click your <b>destination</b>.');
+      setResult('📍 Location set as start. Now tap your <b>destination</b> on the map.');
+      btn.textContent = '📍 Tap destination…';
     } else {
-      btn.textContent = '📍 Click start…';
-      setResult('📍 Click on the map to set your <b>start point</b>.');
+      setResult('📍 Tap the map to set your <b>start point</b>.');
+      btn.textContent = '📍 Tap start…';
     }
+    expandSheet();
   } else {
-    btn.classList.remove('active');
-    btn.textContent = '🗺️ Get Directions';
+    fab.classList.remove('active');
+    fab.textContent = '🗺️';
+    btn.textContent = '🗺️ Directions';
     setResult('Directions mode off.');
   }
 }
@@ -414,21 +387,22 @@ map.on('click', e => {
   if (!routeMode) return;
   routePoints.push(e.latlng);
   if (routePoints.length === 1) {
-    document.getElementById('btn-route-mode').textContent = '📍 Click destination…';
-    setResult('📍 Now click your <b>destination</b>.');
+    setResult('📍 Now tap your <b>destination</b> on the map.');
+    document.getElementById('btn-directions').textContent = '📍 Tap destination…';
   } else if (routePoints.length === 2) {
     drawRoute(routePoints[0], routePoints[1]);
     routeMode = false;
-    const btn = document.getElementById('btn-route-mode');
-    btn.classList.remove('active');
-    btn.textContent = '🗺️ Get Directions';
+    document.getElementById('fab-directions').classList.remove('active');
+    document.getElementById('fab-directions').textContent = '🗺️';
+    document.getElementById('btn-directions').textContent = '🗺️ Directions';
   }
 });
 
 function routeToPlace(lat, lon, name) {
-  if (!userLatLng) { setResult('❌ Your location is not available.'); return; }
+  if (!userLatLng) { setResult('❌ Location unavailable.'); return; }
+  map.closePopup();
   drawRoute(userLatLng, L.latLng(lat, lon));
-  setResult(`🗺️ Getting directions to <b>${name}</b>…`);
+  setResult(`🗺️ Directions to <b>${name}</b>`);
 }
 
 function drawRoute(from, to) {
@@ -436,21 +410,21 @@ function drawRoute(from, to) {
   routeControl = L.Routing.control({
     waypoints: [L.latLng(from.lat, from.lng), L.latLng(to.lat, to.lng)],
     router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-    lineOptions: { styles: [{ color: '#1a73e8', weight: 5, opacity: 0.85 }] },
+    lineOptions: { styles: [{ color: '#007AFF', weight: 5, opacity: 0.9 }] },
     show: true, collapsible: true, addWaypoints: false,
     fitSelectedRoutes: true, showAlternatives: false
   }).addTo(map);
-  document.getElementById('btn-reset-route').style.display = 'inline-block';
+  document.getElementById('fab-clear-route').style.display = 'flex';
 }
 
 function resetRoute() {
   if (routeControl) { map.removeControl(routeControl); routeControl = null; }
   routePoints = [];
-  document.getElementById('btn-reset-route').style.display = 'none';
+  document.getElementById('fab-clear-route').style.display = 'none';
 }
 
 // ─────────────────────────────────────────────
-// 9. PLACE SEARCH (Nominatim autocomplete)
+// 10. SEARCH (Nominatim)
 // ─────────────────────────────────────────────
 
 function onSearchInput() {
@@ -474,8 +448,9 @@ function showSuggestions(results) {
   const box = document.getElementById('search-suggestions');
   if (!results.length) { hideSuggestions(); return; }
   box.innerHTML = results.map(r =>
-    `<div class="suggestion-item" onclick="selectSuggestion(${r.lat},${r.lon},'${r.display_name.replace(/'/g,"\\'")}')">
-      ${r.display_name}
+    `<div class="suggestion-item" ontouchend="selectSuggestion(${r.lat},${r.lon},'${r.display_name.replace(/'/g,"\\'")}')">
+      <span class="suggestion-icon">📍</span>
+      <span>${r.display_name}</span>
     </div>`
   ).join('');
   box.style.display = 'block';
@@ -487,6 +462,7 @@ function hideSuggestions() {
 
 function selectSuggestion(lat, lon, name) {
   document.getElementById('search-input').value = name.split(',')[0];
+  document.getElementById('search-clear').style.display = 'flex';
   hideSuggestions();
   flyToPlace(parseFloat(lat), parseFloat(lon), name);
 }
@@ -495,7 +471,7 @@ async function searchPlace() {
   const query = document.getElementById('search-input').value.trim();
   if (!query) return;
   hideSuggestions();
-  setResult('🔎 Searching...');
+  setResult('🔎 Searching…');
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1`,
@@ -504,27 +480,39 @@ async function searchPlace() {
     const results = await res.json();
     if (!results.length) { setResult(`❌ No results for "<b>${query}</b>".`); return; }
     flyToPlace(parseFloat(results[0].lat), parseFloat(results[0].lon), results[0].display_name);
-  } catch { setResult('❌ Search failed. Check your connection.'); }
+  } catch { setResult('❌ Search failed.'); }
 }
 
 function flyToPlace(lat, lon, name) {
   if (searchPin) map.removeLayer(searchPin);
   searchPin = L.marker([lat, lon])
     .addTo(map)
-    .bindPopup(`<b>🔎 ${name.split(',')[0]}</b><br>${name}`)
+    .bindPopup(`<b>🔎 ${name.split(',')[0]}</b>`)
     .openPopup();
-  map.flyTo([lat, lon], 14, { duration: 1.2 });
-  setResult(`🔎 Showing: <b>${name.split(',')[0]}</b>`);
+  map.flyTo([lat, lon], 14, { animate: true, duration: 1 });
+  setResult(`🔎 <b>${name.split(',')[0]}</b>`);
+  collapseSheet();
 }
 
+document.addEventListener('touchend', e => {
+  if (!e.target.closest('#search-wrap')) hideSuggestions();
+});
 document.addEventListener('click', e => {
-  if (!e.target.closest('#search-container')) hideSuggestions();
+  if (!e.target.closest('#search-wrap')) hideSuggestions();
 });
 
 // ─────────────────────────────────────────────
-// 10. HELPERS
+// 11. UI HELPERS
 // ─────────────────────────────────────────────
 
 function setResult(msg) {
-  document.getElementById('result').innerHTML = msg;
+  document.getElementById('result-toast').innerHTML = msg;
 }
+
+function updateSheetSubtitle(msg) {
+  document.getElementById('sheet-subtitle').textContent = msg;
+}
+
+// Sheet expand/collapse (defined in HTML inline script, exposed here too)
+function expandSheet()  { window.sheetExpanded = true;  document.getElementById('bottom-sheet').classList.remove('collapsed'); }
+function collapseSheet(){ window.sheetExpanded = false; document.getElementById('bottom-sheet').classList.add('collapsed'); }
