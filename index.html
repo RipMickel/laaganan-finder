@@ -3,18 +3,27 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Weather Finder</title>
+  <title>Laaganan Finder</title>
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <!-- Leaflet Routing Machine CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
 
   <style>
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
       font-family: Arial, sans-serif;
     }
 
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+
+    /* ── Top controls panel ── */
     #controls {
       position: absolute;
       top: 10px;
@@ -25,11 +34,7 @@
       padding: 10px 15px;
       border-radius: 10px;
       box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    }
-
-    #map {
-      height: 100vh;
-      width: 100%;
+      white-space: nowrap;
     }
 
     select, button {
@@ -37,6 +42,7 @@
       margin-right: 5px;
       border-radius: 5px;
       border: 1px solid #ccc;
+      font-size: 13px;
     }
 
     button {
@@ -45,20 +51,76 @@
       color: white;
       border: none;
     }
+    button:hover { background-color: #0056b3; }
 
-    button:hover {
-      background-color: #0056b3;
+    #btn-reset-route {
+      background-color: #dc3545;
+    }
+    #btn-reset-route:hover { background-color: #a71d2a; }
+
+    #btn-route-mode {
+      background-color: #28a745;
+    }
+    #btn-route-mode:hover { background-color: #1a6e2e; }
+    #btn-route-mode.active {
+      background-color: #fd7e14;
+      border: 2px solid #c96000;
     }
 
     #result {
       margin-top: 8px;
-      font-size: 14px;
+      font-size: 13px;
+    }
+
+    /* ── Legend (bottom-right) ── */
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    #legend h4 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,0.15);
+    }
+
+    .legend-star { font-size: 15px; line-height: 1; }
+
+    /* ── Routing Machine panel override — keep it tidy ── */
+    .leaflet-routing-container {
+      max-height: 40vh;
+      overflow-y: auto;
+      font-size: 12px;
     }
   </style>
 </head>
 
 <body>
 
+<!-- Top control panel -->
 <div id="controls">
   <select id="activity">
     <option value="general">🌍 General</option>
@@ -66,17 +128,50 @@
     <option value="hiking">🥾 Hiking</option>
   </select>
 
-  <button onclick="loadData()">Find Best Spot</button>
+  <button onclick="loadData()">🔍 Find Best Spot</button>
+
+  <!-- Toggle routing mode on/off -->
+  <button id="btn-route-mode" onclick="toggleRouteMode()">🗺️ Get Directions</button>
+
+  <!-- Clear the drawn route -->
+  <button id="btn-reset-route" onclick="resetRoute()" style="display:none;">✖ Clear Route</button>
 
   <div id="result">Select an activity and click "Find Best Spot"</div>
 </div>
 
 <div id="map"></div>
 
+<!-- Legend -->
+<div id="legend">
+  <h4>Weather Score</h4>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:green;"></div>
+    <span>Great (score ≥ 5)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:orange;"></div>
+    <span>Decent (score 2–4)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background:red;"></div>
+    <span>Poor (score &lt; 2)</span>
+  </div>
+  <div class="legend-item" style="margin-top:4px;">
+    <span class="legend-star">⭐</span>
+    <span>Best spot</span>
+  </div>
+  <hr style="margin:6px 0; border-color:#eee;">
+  <div class="legend-item">
+    <div class="legend-dot" style="background:#1a73e8; border-radius:2px;"></div>
+    <span>Route</span>
+  </div>
+</div>
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<!-- Leaflet Routing Machine JS (uses OSRM by default — free, no key) -->
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
-<!-- Your script -->
 <script src="script.js"></script>
 
 </body>
