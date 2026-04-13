@@ -46,7 +46,7 @@ const CATEGORIES = {
     emoji: '🍽️',
     label: 'Restaurant',
     color: '#e53935',
-    radius: 10000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -59,7 +59,7 @@ const CATEGORIES = {
     emoji: '🍕',
     label: 'Pizza',
     color: '#f4511e',
-    radius: 15000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -73,7 +73,7 @@ const CATEGORIES = {
     emoji: '🥘',
     label: 'Local Food',
     color: '#fb8c00',
-    radius: 10000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -88,7 +88,7 @@ const CATEGORIES = {
     emoji: '🍔',
     label: 'Fast Food',
     color: '#fdd835',
-    radius: 10000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -101,7 +101,7 @@ const CATEGORIES = {
     emoji: '☕',
     label: 'Coffee Shop',
     color: '#6f4e37',
-    radius: 8000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -115,7 +115,7 @@ const CATEGORIES = {
     emoji: '🏊',
     label: 'Swimming Pool',
     color: '#039be5',
-    radius: 15000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -131,7 +131,7 @@ const CATEGORIES = {
     emoji: '🌴',
     label: 'Resort',
     color: '#43a047',
-    radius: 25000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -148,7 +148,7 @@ const CATEGORIES = {
     emoji: '🏖️',
     label: 'Beach',
     color: '#ffb300',
-    radius: 30000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -164,7 +164,7 @@ const CATEGORIES = {
     emoji: '🌳',
     label: 'Park',
     color: '#388e3c',
-    radius: 15000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
@@ -180,7 +180,7 @@ const CATEGORIES = {
     emoji: '🎡',
     label: 'Attraction',
     color: '#8e24aa',
-    radius: 20000,
+    radius: 50000,
     query: (lat, lng, r) => `
       [out:json][timeout:30];
       (
