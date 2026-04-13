@@ -27,173 +27,90 @@ L.control.layers(
 // 2. STATE
 // ─────────────────────────────────────────────
 
-let placeMarkers  = [];      // all category place markers
-let routeControl  = null;
-let routePoints   = [];
-let routeMode     = false;
-let locationPin   = null;
-let userLatLng    = null;
-let searchPin     = null;
-let searchTimer   = null;
+let placeMarkers   = [];      // all category place markers
+let routeControl   = null;
+let routePoints    = [];
+let routeMode      = false;
+let locationPin    = null;
+let userLatLng     = null;
+let searchPin      = null;
+let searchTimer    = null;
 let activeCategory = null;
+const resultCache  = {};      // cache: "type|lat4|lng4" → elements[]
 
 // ─────────────────────────────────────────────
 // 3. CATEGORY CONFIG
 // ─────────────────────────────────────────────
 
+// Faster Overpass mirrors — tried in order until one succeeds
+const OVERPASS_MIRRORS = [
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass-api.de/api/interpreter',
+];
+
+// Pick the fastest mirror via a lightweight race
+let fastMirror = OVERPASS_MIRRORS[0]; // will be updated on first use
+
+async function overpassFetch(query) {
+  // Try mirrors in parallel, use whichever responds first
+  const controllers = OVERPASS_MIRRORS.map(() => new AbortController());
+  const requests = OVERPASS_MIRRORS.map((url, i) =>
+    fetch(url, {
+      method: 'POST',
+      body: query,
+      signal: controllers[i].signal
+    }).then(async r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const json = await r.json();
+      // Cancel remaining requests
+      controllers.forEach((c, j) => { if (j !== i) c.abort(); });
+      fastMirror = url;
+      return json;
+    })
+  );
+  return Promise.any(requests);
+}
+
 const CATEGORIES = {
   restaurant: {
-    emoji: '🍽️',
-    label: 'Restaurant',
-    color: '#e53935',
-    radius: 10000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["amenity"="restaurant"](around:${r},${lat},${lng});
-        way["amenity"="restaurant"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🍽️', label: 'Restaurant', color: '#e53935', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["amenity"="restaurant"](around:${r},${lat},${lng}););out qt 120;`
   },
   pizza: {
-    emoji: '🍕',
-    label: 'Pizza',
-    color: '#f4511e',
-    radius: 15000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["amenity"="restaurant"]["cuisine"~"pizza",i](around:${r},${lat},${lng});
-        node["name"~"pizza",i](around:${r},${lat},${lng});
-        way["amenity"="restaurant"]["cuisine"~"pizza",i](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🍕', label: 'Pizza', color: '#f4511e', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["amenity"~"restaurant|fast_food"]["cuisine"~"pizza",i](around:${r},${lat},${lng});node["name"~"pizza",i](around:${r},${lat},${lng}););out qt 100;`
   },
   local: {
-    emoji: '🥘',
-    label: 'Local Food',
-    color: '#fb8c00',
-    radius: 10000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["amenity"="restaurant"]["cuisine"~"filipino|local|native|pinoy|lutong_bahay|carinderia",i](around:${r},${lat},${lng});
-        node["amenity"="fast_food"]["cuisine"~"filipino|local|native",i](around:${r},${lat},${lng});
-        node["name"~"carinderia|lutong|pinoy|turo.turo|kainan",i](around:${r},${lat},${lng});
-        way["amenity"="restaurant"]["cuisine"~"filipino|local|native",i](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🥘', label: 'Local Food', color: '#fb8c00', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["amenity"~"restaurant|fast_food"]["cuisine"~"filipino|local|native|pinoy",i](around:${r},${lat},${lng});node["name"~"carinderia|lutong|turo|kainan",i](around:${r},${lat},${lng}););out qt 100;`
   },
   fastfood: {
-    emoji: '🍔',
-    label: 'Fast Food',
-    color: '#fdd835',
-    radius: 10000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["amenity"="fast_food"](around:${r},${lat},${lng});
-        way["amenity"="fast_food"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🍔', label: 'Fast Food', color: '#e6a817', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["amenity"="fast_food"](around:${r},${lat},${lng}););out qt 120;`
   },
   coffee: {
-    emoji: '☕',
-    label: 'Coffee Shop',
-    color: '#6f4e37',
-    radius: 8000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["amenity"="cafe"](around:${r},${lat},${lng});
-        node["shop"="coffee"](around:${r},${lat},${lng});
-        way["amenity"="cafe"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '☕', label: 'Coffee Shop', color: '#6f4e37', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["amenity"="cafe"](around:${r},${lat},${lng});node["shop"="coffee"](around:${r},${lat},${lng}););out qt 100;`
   },
   pool: {
-    emoji: '🏊',
-    label: 'Swimming Pool',
-    color: '#039be5',
-    radius: 15000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["leisure"="swimming_pool"]["access"!="private"](around:${r},${lat},${lng});
-        node["amenity"="public_bath"](around:${r},${lat},${lng});
-        node["name"~"pool|swimming|aqua|swim",i](around:${r},${lat},${lng});
-        way["leisure"="swimming_pool"]["access"!="private"](around:${r},${lat},${lng});
-        way["name"~"pool|swimming|aqua",i](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🏊', label: 'Swimming Pool', color: '#039be5', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["leisure"="swimming_pool"]["access"!="private"](around:${r},${lat},${lng});way["leisure"="swimming_pool"]["access"!="private"](around:${r},${lat},${lng}););out center qt 80;`
   },
   resort: {
-    emoji: '🌴',
-    label: 'Resort',
-    color: '#43a047',
-    radius: 25000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["tourism"="resort"](around:${r},${lat},${lng});
-        node["name"~"resort",i](around:${r},${lat},${lng});
-        node["leisure"="resort"](around:${r},${lat},${lng});
-        way["tourism"="resort"](around:${r},${lat},${lng});
-        way["name"~"resort",i](around:${r},${lat},${lng});
-        relation["tourism"="resort"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🌴', label: 'Resort', color: '#43a047', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["tourism"="resort"](around:${r},${lat},${lng});node["name"~"resort",i](around:${r},${lat},${lng});way["tourism"="resort"](around:${r},${lat},${lng}););out center qt 80;`
   },
   beach: {
-    emoji: '🏖️',
-    label: 'Beach',
-    color: '#ffb300',
-    radius: 30000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["natural"="beach"](around:${r},${lat},${lng});
-        node["leisure"="beach_resort"](around:${r},${lat},${lng});
-        way["natural"="beach"](around:${r},${lat},${lng});
-        way["leisure"="beach_resort"](around:${r},${lat},${lng});
-        relation["natural"="beach"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🏖️', label: 'Beach', color: '#ffb300', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["natural"="beach"](around:${r},${lat},${lng});way["natural"="beach"](around:${r},${lat},${lng});node["leisure"="beach_resort"](around:${r},${lat},${lng}););out center qt 80;`
   },
   park: {
-    emoji: '🌳',
-    label: 'Park',
-    color: '#388e3c',
-    radius: 15000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["leisure"="park"](around:${r},${lat},${lng});
-        node["leisure"="nature_reserve"](around:${r},${lat},${lng});
-        way["leisure"="park"](around:${r},${lat},${lng});
-        way["leisure"="nature_reserve"](around:${r},${lat},${lng});
-        relation["leisure"="park"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🌳', label: 'Park', color: '#388e3c', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["leisure"="park"](around:${r},${lat},${lng});way["leisure"="park"](around:${r},${lat},${lng}););out center qt 100;`
   },
   attraction: {
-    emoji: '🎡',
-    label: 'Attraction',
-    color: '#8e24aa',
-    radius: 20000,
-    query: (lat, lng, r) => `
-      [out:json][timeout:30];
-      (
-        node["tourism"="attraction"](around:${r},${lat},${lng});
-        node["tourism"="theme_park"](around:${r},${lat},${lng});
-        node["tourism"="museum"](around:${r},${lat},${lng});
-        node["tourism"="zoo"](around:${r},${lat},${lng});
-        node["leisure"="amusement_arcade"](around:${r},${lat},${lng});
-        way["tourism"="attraction"](around:${r},${lat},${lng});
-        way["tourism"="theme_park"](around:${r},${lat},${lng});
-        way["tourism"="museum"](around:${r},${lat},${lng});
-      );
-      out center;`
+    emoji: '🎡', label: 'Attraction', color: '#8e24aa', radius: 50000,
+    query: (lat, lng, r) => `[out:json][timeout:25];(node["tourism"~"attraction|theme_park|museum|zoo"](around:${r},${lat},${lng});way["tourism"~"attraction|theme_park|museum"](around:${r},${lat},${lng}););out center qt 100;`
   }
 };
 
@@ -267,7 +184,6 @@ async function findPlaces(type) {
   const cfg = CATEGORIES[type];
   if (!cfg) return;
 
-  // Highlight active button
   document.querySelectorAll('.place-btn').forEach(b => b.classList.remove('active'));
   const activeBtn = document.getElementById(`pbtn-${type}`);
   if (activeBtn) activeBtn.classList.add('active');
@@ -275,87 +191,89 @@ async function findPlaces(type) {
   clearPlaces(false);
   activeCategory = type;
 
-  const km = (cfg.radius / 1000).toFixed(0);
-  setResult(`${cfg.emoji} Searching for ${cfg.label} within ${km} km…`);
-
   const { lat, lng } = userLatLng;
-  const overpassQuery = cfg.query(lat, lng, cfg.radius);
+  const km = (cfg.radius / 1000).toFixed(0);
+  const cacheKey = `${type}|${lat.toFixed(3)}|${lng.toFixed(3)}`;
+
+  // ── Serve instantly from cache ──
+  if (resultCache[cacheKey]) {
+    renderPlaceMarkers(resultCache[cacheKey], cfg);
+    const n = resultCache[cacheKey].length;
+    setResult(`${cfg.emoji} <b>${n}</b> ${cfg.label}${n !== 1 ? 's' : ''} within <b>${km} km</b> <i style="color:#888">(cached — instant)</i>`);
+    return;
+  }
+
+  setResult(`${cfg.emoji} Searching for ${cfg.label}s within ${km} km…`);
 
   try {
-    const res = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      body: overpassQuery
-    });
-    const data = await res.json();
+    const data = await overpassFetch(cfg.query(lat, lng, cfg.radius));
     let elements = data.elements;
 
-    // Deduplicate by name+coords (ways + nodes can overlap)
+    // Deduplicate by rounded coords
     const seen = new Set();
     elements = elements.filter(el => {
       const elLat = el.lat ?? el.center?.lat;
       const elLon = el.lon ?? el.center?.lon;
       if (!elLat || !elLon) return false;
-      const key = `${(el.tags?.name || '').toLowerCase()}|${elLat.toFixed(4)}|${elLon.toFixed(4)}`;
+      const key = `${elLat.toFixed(4)}|${elLon.toFixed(4)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
 
+    resultCache[cacheKey] = elements;
+    renderPlaceMarkers(elements, cfg);
+
     if (!elements.length) {
-      setResult(`${cfg.emoji} No ${cfg.label} found within ${km} km of your location.`);
+      setResult(`${cfg.emoji} No ${cfg.label}s found within ${km} km of your location.`);
       return;
     }
-
-    const icon = makePlaceIcon(cfg.emoji, cfg.color);
-
-    elements.forEach(el => {
-      const elLat = el.lat ?? el.center?.lat;
-      const elLon = el.lon ?? el.center?.lon;
-      const name    = el.tags?.name    || cfg.label;
-      const cuisine = el.tags?.cuisine ? `🍴 ${el.tags.cuisine.replace(/_/g,' ')}` : '';
-      const phone   = el.tags?.phone   || el.tags?.['contact:phone'] || '';
-      const hours   = el.tags?.opening_hours || '';
-      const website = el.tags?.website || el.tags?.['contact:website'] || '';
-      const wifi    = el.tags?.internet_access === 'wlan' ? '📶 WiFi' : '';
-      const fee     = el.tags?.fee === 'yes' ? '💳 Entrance fee' : (el.tags?.fee === 'no' ? '🆓 Free entry' : '');
-
-      const safeName = name.replace(/'/g, "\\'");
-
-      const lines = [
-        `<b>${cfg.emoji} ${name}</b>`,
-        cuisine,
-        phone   ? `📞 ${phone}` : '',
-        hours   ? `🕐 ${hours}` : '',
-        website ? `🌐 <a href="${website}" target="_blank">Website</a>` : '',
-        wifi,
-        fee,
-        `<br><span style="color:#1a73e8;cursor:pointer;"
-          onclick="routeToPlace(${elLat},${elLon},'${safeName}')">
-          🗺️ Directions from my location
-        </span>`
-      ].filter(Boolean).join('<br>');
-
-      const marker = L.marker([elLat, elLon], { icon })
-        .addTo(map)
-        .bindPopup(lines);
-
-      placeMarkers.push(marker);
-    });
-
-    document.getElementById('btn-clear-places').style.display = 'block';
-
-    // Fit map to markers + user pin
-    const allMarkers = [...placeMarkers, ...(locationPin ? [locationPin] : [])];
-    if (allMarkers.length > 1) {
-      map.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.1));
-    }
-
-    setResult(`${cfg.emoji} Found <b>${elements.length}</b> ${cfg.label}${elements.length > 1 ? 's' : ''} within <b>${km} km</b>. Click a marker for details.`);
+    setResult(`${cfg.emoji} Found <b>${elements.length}</b> ${cfg.label}${elements.length !== 1 ? 's' : ''} within <b>${km} km</b> — click a marker for details.`);
 
   } catch (err) {
-    setResult(`❌ Failed to load ${cfg.label} data. Check your connection.`);
+    setResult(`❌ Failed to load ${cfg.label} data. Try again or check your connection.`);
     console.error(err);
   }
+}
+
+function renderPlaceMarkers(elements, cfg) {
+  if (!elements.length) return;
+  const icon = makePlaceIcon(cfg.emoji, cfg.color);
+
+  elements.forEach(el => {
+    const elLat = el.lat ?? el.center?.lat;
+    const elLon = el.lon ?? el.center?.lon;
+    if (!elLat || !elLon) return;
+
+    const name    = el.tags?.name    || cfg.label;
+    const cuisine = el.tags?.cuisine ? `🍴 ${el.tags.cuisine.replace(/_/g,' ')}` : '';
+    const phone   = el.tags?.phone   || el.tags?.['contact:phone'] || '';
+    const hours   = el.tags?.opening_hours || '';
+    const website = el.tags?.website || el.tags?.['contact:website'] || '';
+    const wifi    = el.tags?.internet_access === 'wlan' ? '📶 WiFi' : '';
+    const fee     = el.tags?.fee === 'yes' ? '💳 Entrance fee' : (el.tags?.fee === 'no' ? '🆓 Free entry' : '');
+    const safeName = name.replace(/'/g, "\\'");
+
+    const lines = [
+      `<b>${cfg.emoji} ${name}</b>`,
+      cuisine,
+      phone   ? `📞 ${phone}` : '',
+      hours   ? `🕐 ${hours}` : '',
+      website ? `🌐 <a href="${website}" target="_blank">Website</a>` : '',
+      wifi, fee,
+      `<br><span style="color:#1a73e8;cursor:pointer;"
+        onclick="routeToPlace(${elLat},${elLon},'${safeName}')">
+        🗺️ Directions from my location
+      </span>`
+    ].filter(Boolean).join('<br>');
+
+    const marker = L.marker([elLat, elLon], { icon }).addTo(map).bindPopup(lines);
+    placeMarkers.push(marker);
+  });
+
+  document.getElementById('btn-clear-places').style.display = 'block';
+  const allMarkers = [...placeMarkers, ...(locationPin ? [locationPin] : [])];
+  if (allMarkers.length > 1) map.fitBounds(L.featureGroup(allMarkers).getBounds().pad(0.1));
 }
 
 function clearPlaces(resetBtn = true) {
