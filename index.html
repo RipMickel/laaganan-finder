@@ -67,10 +67,75 @@
       border: 2px solid #c96000;
     }
 
+    #btn-my-location {
+      background-color: #6f42c1;
+    }
+    #btn-my-location:hover { background-color: #4e2d8a; }
+
     #result {
       margin-top: 8px;
       font-size: 13px;
     }
+
+    /* ── Search box (top-left) ── */
+    #search-container {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      display: flex;
+      gap: 5px;
+    }
+
+    #search-input {
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 13px;
+      width: 220px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      outline: none;
+    }
+    #search-input:focus {
+      border-color: #007bff;
+    }
+
+    #btn-search {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    #btn-search:hover { background: #0056b3; }
+
+    /* Search autocomplete dropdown */
+    #search-suggestions {
+      position: absolute;
+      top: 38px;
+      left: 0;
+      width: 220px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      font-size: 13px;
+      overflow: hidden;
+      display: none;
+      z-index: 1001;
+    }
+
+    .suggestion-item {
+      padding: 8px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f0f0;
+      white-space: normal;
+      line-height: 1.4;
+    }
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background: #f0f6ff; }
 
     /* ── Legend (bottom-right) ── */
     #legend {
@@ -109,7 +174,7 @@
 
     .legend-star { font-size: 15px; line-height: 1; }
 
-    /* ── Routing Machine panel override — keep it tidy ── */
+    /* ── Routing Machine panel ── */
     .leaflet-routing-container {
       max-height: 40vh;
       overflow-y: auto;
@@ -120,6 +185,21 @@
 
 <body>
 
+<!-- Search box (top-left) -->
+<div id="search-container">
+  <div style="position:relative;">
+    <input
+      id="search-input"
+      type="text"
+      placeholder="🔎 Search a place..."
+      oninput="onSearchInput()"
+      onkeydown="if(event.key==='Enter') searchPlace()"
+    />
+    <div id="search-suggestions"></div>
+  </div>
+  <button id="btn-search" onclick="searchPlace()">Go</button>
+</div>
+
 <!-- Top control panel -->
 <div id="controls">
   <select id="activity">
@@ -129,11 +209,8 @@
   </select>
 
   <button onclick="loadData()">🔍 Find Best Spot</button>
-
-  <!-- Toggle routing mode on/off -->
+  <button id="btn-my-location" onclick="goToMyLocation()">📍 My Location</button>
   <button id="btn-route-mode" onclick="toggleRouteMode()">🗺️ Get Directions</button>
-
-  <!-- Clear the drawn route -->
   <button id="btn-reset-route" onclick="resetRoute()" style="display:none;">✖ Clear Route</button>
 
   <div id="result">Select an activity and click "Find Best Spot"</div>
@@ -143,7 +220,7 @@
 
 <!-- Legend -->
 <div id="legend">
-  <h4>Weather Score</h4>
+  <h4>Map Legend</h4>
   <div class="legend-item">
     <div class="legend-dot" style="background:green;"></div>
     <span>Great (score ≥ 5)</span>
@@ -160,6 +237,10 @@
     <span class="legend-star">⭐</span>
     <span>Best spot</span>
   </div>
+  <div class="legend-item">
+    <span class="legend-star">📍</span>
+    <span>Your location</span>
+  </div>
   <hr style="margin:6px 0; border-color:#eee;">
   <div class="legend-item">
     <div class="legend-dot" style="background:#1a73e8; border-radius:2px;"></div>
@@ -169,7 +250,7 @@
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<!-- Leaflet Routing Machine JS (uses OSRM by default — free, no key) -->
+<!-- Leaflet Routing Machine (OSRM — free, no key) -->
 <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
 <script src="script.js"></script>
