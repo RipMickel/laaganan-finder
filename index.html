@@ -49,6 +49,23 @@
 
     #result { font-size: 13px; width: 100%; margin-top: 2px; }
 
+    /* ── Loading bar ── */
+    #loading-bar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      z-index: 2000;
+      display: none;
+      height: 4px;
+      background: #e0e0e0;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #007bff, #00c6ff);
+      transition: width 0.4s ease;
+      border-radius: 0 2px 2px 0;
+    }
+
     /* ── Search box ── */
     #search-container {
       position: absolute;
@@ -174,6 +191,9 @@
   </style>
 </head>
 <body>
+
+<!-- Loading bar -->
+<div id="loading-bar"><div class="bar-fill"></div></div>
 
 <!-- Search box -->
 <div id="search-container">
