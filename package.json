@@ -1,26 +1,26 @@
 {
-  "name": "weather-finder",
+  "name": "laaganan-finder",
   "version": "1.0.0",
   "description": "",
-  "main": "script.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/RipMickel/weather-finder.git"
+    "url": "git+https://github.com/RipMickel/laaganan-finder.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/RipMickel/weather-finder/issues"
+    "url": "https://github.com/RipMickel/laaganan-finder/issues"
   },
-  "homepage": "https://github.com/RipMickel/weather-finder#readme",
+  "homepage": "https://github.com/RipMickel/laaganan-finder#readme",
   "dependencies": {
     "dotenv": "^17.4.1",
-    "express": "^5.2.1",
-    "node-fetch": "^3.3.2"
+    "express": "^5.2.1"
   }
 }
