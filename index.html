@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather Finder</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+<div id="controls">
+  <select id="activity">
+    <option value="general">🌍 General</option>
+    <option value="beach">🏖️ Beach</option>
+    <option value="hiking">🥾 Hiking</option>
+  </select>
+  <button onclick="loadData()">Find Best Spot</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>
