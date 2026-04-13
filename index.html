@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Weather Finder</title>
+  <title>Laaganan Finder</title>
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
   <style>
@@ -54,6 +52,46 @@
       margin-top: 8px;
       font-size: 14px;
     }
+
+    /* Legend */
+    #legend {
+      position: absolute;
+      bottom: 30px;
+      right: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px 14px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    #legend h4 {
+      margin: 0 0 6px 0;
+      font-size: 13px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .legend-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid rgba(0,0,0,0.15);
+    }
+
+    .legend-star {
+      font-size: 15px;
+      line-height: 1;
+    }
   </style>
 </head>
 
@@ -73,10 +111,28 @@
 
 <div id="map"></div>
 
+<div id="legend">
+  <h4>Weather Score</h4>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: green;"></div>
+    <span>Great (score ≥ 5)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: orange;"></div>
+    <span>Decent (score 2–4)</span>
+  </div>
+  <div class="legend-item">
+    <div class="legend-dot" style="background: red;"></div>
+    <span>Poor (score &lt; 2)</span>
+  </div>
+  <div class="legend-item" style="margin-top: 4px;">
+    <span class="legend-star">⭐</span>
+    <span>Best spot</span>
+  </div>
+</div>
+
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-<!-- Your script -->
 <script src="script.js"></script>
 
 </body>
