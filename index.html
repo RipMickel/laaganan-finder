@@ -9,7 +9,7 @@
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
-  <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -30,13 +30,15 @@
       --sep: #E5E5EA;
       --radius: 14px;
       --sheet-radius: 20px;
+      /* Topbar height tracked via JS, default estimate */
+      --topbar-h: 60px;
     }
 
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
     html, body {
       margin: 0; padding: 0;
-      font-family: -apple-system, 'SF Pro Display', BlinkMacSystemFont, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       height: 100%; overflow: hidden;
       background: var(--bg);
     }
@@ -75,12 +77,15 @@
       display: flex;
       gap: 8px;
       align-items: center;
+      /* subtle blur backdrop on iOS/Safari */
+      backdrop-filter: none;
     }
 
     /* Search pill */
     #search-wrap {
       flex: 1;
       position: relative;
+      min-width: 0; /* prevent flex overflow */
     }
     #search-input {
       width: 100%;
@@ -94,6 +99,7 @@
       outline: none;
       box-shadow: 0 2px 12px rgba(0,0,0,0.12);
       -webkit-appearance: none;
+      font-family: inherit;
     }
     #search-input::placeholder { color: #AEAEB2; }
     #search-clear {
@@ -110,6 +116,8 @@
       align-items: center;
       justify-content: center;
       cursor: pointer;
+      padding: 0;
+      line-height: 1;
     }
 
     /* Top icon buttons */
@@ -124,10 +132,16 @@
       box-shadow: 0 2px 12px rgba(0,0,0,0.12);
       cursor: pointer;
       flex-shrink: 0;
-      transition: transform 0.1s;
+      transition: transform 0.1s, background 0.15s, color 0.15s;
+      user-select: none;
     }
     .top-icon-btn:active { transform: scale(0.93); }
-    .top-icon-btn.danger { color: var(--red); }
+    /* Satellite active state */
+    .top-icon-btn#btn-satellite.active {
+      background: #1C1C1E;
+      color: #FFD60A;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+    }
 
     /* Search suggestions */
     #search-suggestions {
@@ -155,14 +169,13 @@
     }
     .suggestion-item:last-child { border-bottom: none; }
     .suggestion-item:active { background: var(--bg); }
-    .suggestion-icon { color: var(--text2); font-size: 16px; }
+    .suggestion-icon { color: var(--text2); font-size: 16px; flex-shrink: 0; }
 
     /* ── CATEGORY PILLS (horizontal scroll) ── */
     #category-bar {
       position: fixed;
       left: 0; right: 0;
       z-index: 999;
-      /* will be positioned below topbar dynamically */
       padding: 8px 0 8px 12px;
       display: flex;
       gap: 8px;
@@ -172,10 +185,11 @@
       scrollbar-width: none;
     }
     #category-bar::-webkit-scrollbar { display: none; }
+    /* Right fade hint */
     #category-bar::after {
       content: '';
       flex-shrink: 0;
-      width: 12px;
+      width: 16px;
     }
 
     .cat-pill {
@@ -195,6 +209,7 @@
       transition: transform 0.1s, background 0.15s;
       flex-shrink: 0;
       -webkit-tap-highlight-color: transparent;
+      font-family: inherit;
     }
     .cat-pill:active { transform: scale(0.95); }
     .cat-pill.active {
@@ -225,7 +240,7 @@
       transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
       padding-bottom: var(--safe-bottom);
     }
-    #bottom-sheet.collapsed { transform: translateY(calc(100% - 70px)); }
+    #bottom-sheet.collapsed { transform: translateY(calc(100% - 72px)); }
 
     /* Drag handle */
     .sheet-handle {
@@ -242,6 +257,7 @@
       align-items: center;
       justify-content: space-between;
       cursor: pointer;
+      user-select: none;
     }
     #sheet-title {
       font-size: 17px;
@@ -257,6 +273,7 @@
       font-size: 20px;
       color: #AEAEB2;
       transition: transform 0.3s;
+      flex-shrink: 0;
     }
     #bottom-sheet.collapsed #sheet-chevron { transform: rotate(180deg); }
 
@@ -276,7 +293,7 @@
       border-radius: var(--radius);
       font-size: 14px;
       color: var(--text);
-      line-height: 1.4;
+      line-height: 1.5;
     }
 
     /* Action buttons row */
@@ -298,6 +315,7 @@
       align-items: center;
       justify-content: center;
       gap: 6px;
+      font-family: inherit;
     }
     .action-btn:active { transform: scale(0.97); opacity: 0.85; }
     .action-btn.primary { background: var(--blue); color: white; }
@@ -323,10 +341,77 @@
       display: flex; align-items: center; justify-content: center;
       box-shadow: 0 3px 14px rgba(0,0,0,0.15);
       cursor: pointer;
-      transition: transform 0.1s;
+      transition: transform 0.1s, background 0.15s;
     }
     .fab:active { transform: scale(0.92); }
     .fab.active { background: var(--orange); color: white; }
+
+    /* ── DESKTOP LAYOUT ── */
+    @media (min-width: 768px) {
+      /* Constrain topbar to a max width & center it */
+      #topbar {
+        max-width: 900px;
+        left: 50%;
+        transform: translateX(-50%);
+        right: auto;
+        width: 100%;
+        padding-left: 20px;
+        padding-right: 20px;
+      }
+
+      /* Category bar centered */
+      #category-bar {
+        max-width: 900px;
+        left: 50%;
+        transform: translateX(-50%);
+        right: auto;
+        width: 100%;
+        padding-left: 20px;
+      }
+
+      /* Bottom sheet becomes a side panel on desktop */
+      #bottom-sheet {
+        left: auto;
+        right: 20px;
+        bottom: 20px;
+        width: 360px;
+        border-radius: var(--sheet-radius);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+        transition: transform 0.35s cubic-bezier(0.32,0.72,0,1), opacity 0.3s;
+      }
+      #bottom-sheet.collapsed {
+        transform: translateY(calc(100% + 20px));
+        /* keep a peek tab */
+      }
+      /* On desktop always keep sheet peeking */
+      #bottom-sheet {
+        transform: translateY(0);
+      }
+      #bottom-sheet.collapsed {
+        transform: translateY(calc(100% - 72px + 20px));
+      }
+
+      /* FAB group on desktop - move left of the sheet */
+      #fab-group {
+        right: 396px;
+      }
+
+      /* Sheet content taller on desktop */
+      #sheet-content {
+        max-height: 55vh;
+      }
+
+      /* Leaflet routing panel */
+      .leaflet-routing-container {
+        max-height: 45vh;
+      }
+    }
+
+    @media (min-width: 1200px) {
+      #topbar, #category-bar {
+        max-width: 1100px;
+      }
+    }
 
     /* Leaflet popup mobile-friendly */
     .leaflet-popup-content-wrapper {
@@ -343,6 +428,23 @@
       overflow-y: auto;
       font-size: 13px;
       border-radius: var(--radius);
+    }
+
+    /* Hide default Leaflet layer control (we use our own button) */
+    .leaflet-control-layers {
+      display: none !important;
+    }
+
+    /* Zoom control nudge so it doesn't overlap sheet */
+    .leaflet-bottom.leaflet-right {
+      bottom: 80px;
+      right: 16px;
+    }
+    @media (min-width: 768px) {
+      .leaflet-bottom.leaflet-right {
+        bottom: 24px;
+        right: 400px;
+      }
     }
 
     /* Tap states for iOS feel */
@@ -369,6 +471,9 @@
     <button id="search-clear" onclick="clearSearch()">✕</button>
     <div id="search-suggestions"></div>
   </div>
+  <!-- Satellite toggle -->
+  <button class="top-icon-btn" id="btn-satellite" onclick="toggleSatellite()" title="Switch to Satellite View">🛰️</button>
+  <!-- My location -->
   <button class="top-icon-btn" onclick="goToMyLocation()" title="My Location">📍</button>
 </div>
 
@@ -389,7 +494,8 @@
 <!-- FLOATING ACTION BUTTONS -->
 <div id="fab-group">
   <button class="fab" id="fab-directions" onclick="toggleRouteMode()" title="Get Directions">🗺️</button>
-  <button class="fab danger" id="fab-clear-route" onclick="resetRoute()" style="display:none;background:var(--red);color:white;" title="Clear Route">✕</button>
+  <button class="fab" id="fab-clear-route" onclick="resetRoute()"
+    style="display:none;background:var(--red);color:white;" title="Clear Route">✕</button>
 </div>
 
 <!-- BOTTOM SHEET -->
@@ -416,15 +522,19 @@
 <script src="script.js"></script>
 
 <script>
-  // Position category bar below topbar dynamically
-  function positionCategoryBar() {
+  // ── Layout positioning ──
+  function positionUI() {
     const tb = document.getElementById('topbar');
     const cb = document.getElementById('category-bar');
-    cb.style.top = tb.offsetHeight + 'px';
-    // Position FABs above bottom sheet
-    const sheet = document.getElementById('bottom-sheet');
+    const tbH = tb.offsetHeight;
+    cb.style.top = tbH + 'px';
+
+    // Position FABs: above bottom-sheet on mobile, fixed on desktop
     const fab = document.getElementById('fab-group');
-    fab.style.bottom = (72 + parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom') || 0)) + 'px';
+    const safeBottom = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom') || '0'
+    );
+    fab.style.bottom = (80 + safeBottom) + 'px';
   }
 
   let sheetExpanded = false;
@@ -451,16 +561,17 @@
     document.getElementById('search-clear').style.display = this.value ? 'flex' : 'none';
   });
 
-  window.addEventListener('resize', positionCategoryBar);
-  window.addEventListener('load', positionCategoryBar);
-  setTimeout(positionCategoryBar, 100);
+  window.addEventListener('resize', positionUI);
+  window.addEventListener('load', positionUI);
+  setTimeout(positionUI, 100);
+  // Re-run after fonts load
+  document.fonts && document.fonts.ready.then(positionUI);
 
-  // Touch drag for bottom sheet
-  let startY = 0, startExpanded = false;
+  // ── Touch drag for bottom sheet (mobile) ──
+  let startY = 0;
   const sheet = document.getElementById('bottom-sheet');
   sheet.addEventListener('touchstart', e => {
     startY = e.touches[0].clientY;
-    startExpanded = sheetExpanded;
   }, { passive: true });
   sheet.addEventListener('touchend', e => {
     const dy = e.changedTouches[0].clientY - startY;

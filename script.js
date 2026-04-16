@@ -16,18 +16,12 @@ const map = L.map('map', {
   center: [14.5995, 120.9842],
   zoom: 11,
   layers: [osmLayer],
-  zoomControl: false,          // we'll add it in a better spot
+  zoomControl: false,
   attributionControl: false
 });
 
-// Zoom control — top-right, below topbar+pills
 L.control.zoom({ position: 'bottomright' }).addTo(map);
 L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
-
-L.control.layers(
-  { '🗺️ Street': osmLayer, '🛰️ Satellite': satelliteLayer },
-  {}, { position: 'topright' }
-).addTo(map);
 
 // ─────────────────────────────────────────────
 // 2. STATE
@@ -44,11 +38,32 @@ let searchPin      = null;
 let searchTimer    = null;
 let activeCategory = null;
 let preloadDone    = false;
+let isSatellite    = false;
 
 const RADIUS = 50000; // 50 km
 
 // ─────────────────────────────────────────────
-// 3. OVERPASS — single bulk query
+// 3. SATELLITE TOGGLE
+// ─────────────────────────────────────────────
+
+function toggleSatellite() {
+  isSatellite = !isSatellite;
+  const btn = document.getElementById('btn-satellite');
+  if (isSatellite) {
+    map.removeLayer(osmLayer);
+    map.addLayer(satelliteLayer);
+    btn.classList.add('active');
+    btn.title = 'Switch to Street Map';
+  } else {
+    map.removeLayer(satelliteLayer);
+    map.addLayer(osmLayer);
+    btn.classList.remove('active');
+    btn.title = 'Switch to Satellite View';
+  }
+}
+
+// ─────────────────────────────────────────────
+// 4. OVERPASS — single bulk query
 // ─────────────────────────────────────────────
 
 const OVERPASS_MIRRORS = [
@@ -97,7 +112,7 @@ out center qt;
 }
 
 // ─────────────────────────────────────────────
-// 4. CATEGORIES & CLASSIFIER
+// 5. CATEGORIES & CLASSIFIER
 // ─────────────────────────────────────────────
 
 const CATEGORIES = {
@@ -143,7 +158,7 @@ function classifyAll(elements) {
 }
 
 // ─────────────────────────────────────────────
-// 5. LOADING BAR
+// 6. LOADING BAR
 // ─────────────────────────────────────────────
 
 let _barTimer = null;
@@ -169,7 +184,7 @@ function failLoadingBar() {
 }
 
 // ─────────────────────────────────────────────
-// 6. PRELOAD
+// 7. PRELOAD
 // ─────────────────────────────────────────────
 
 async function preloadAllCategories(lat, lng) {
@@ -208,7 +223,7 @@ async function preloadAllCategories(lat, lng) {
 }
 
 // ─────────────────────────────────────────────
-// 7. LOCATION PIN
+// 8. LOCATION PIN
 // ─────────────────────────────────────────────
 
 const locationIcon = L.divIcon({
@@ -252,11 +267,10 @@ navigator.geolocation.getCurrentPosition(
 );
 
 // ─────────────────────────────────────────────
-// 8. SHOW CATEGORY (instant)
+// 9. SHOW CATEGORY (instant)
 // ─────────────────────────────────────────────
 
 function findPlaces(type) {
-  // Highlight pill
   document.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
   const pill = document.getElementById(`pbtn-${type}`);
   if (pill) {
@@ -318,7 +332,6 @@ function showCategory(type) {
     placeMarkers.push(marker);
   });
 
-  // Show clear button in sheet
   document.getElementById('btn-clear-places').style.display = 'flex';
 
   const all = [...placeMarkers, ...(locationPin ? [locationPin] : [])];
@@ -353,7 +366,7 @@ function clearPlaces(full = true) {
 }
 
 // ─────────────────────────────────────────────
-// 9. ROUTING
+// 10. ROUTING
 // ─────────────────────────────────────────────
 
 function toggleRouteMode() {
@@ -424,7 +437,7 @@ function resetRoute() {
 }
 
 // ─────────────────────────────────────────────
-// 10. SEARCH (Nominatim)
+// 11. SEARCH (Nominatim)
 // ─────────────────────────────────────────────
 
 function onSearchInput() {
@@ -502,7 +515,7 @@ document.addEventListener('click', e => {
 });
 
 // ─────────────────────────────────────────────
-// 11. UI HELPERS
+// 12. UI HELPERS
 // ─────────────────────────────────────────────
 
 function setResult(msg) {
@@ -513,6 +526,5 @@ function updateSheetSubtitle(msg) {
   document.getElementById('sheet-subtitle').textContent = msg;
 }
 
-// Sheet expand/collapse (defined in HTML inline script, exposed here too)
 function expandSheet()  { window.sheetExpanded = true;  document.getElementById('bottom-sheet').classList.remove('collapsed'); }
 function collapseSheet(){ window.sheetExpanded = false; document.getElementById('bottom-sheet').classList.add('collapsed'); }
